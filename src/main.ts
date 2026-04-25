@@ -1,0 +1,19 @@
+import { createApp } from "vue";
+import { createRouter, createWebHashHistory } from "vue-router";
+import App from "./App.vue";
+import WriteView from "./views/WriteView.vue";
+import WorkbenchView from "./views/WorkbenchView.vue";
+import PdfView from "./views/PdfView.vue";
+import "./assets/style.css";
+
+const router = createRouter({
+  history: createWebHashHistory(),
+  routes: [
+    { path: "/", redirect: "/write" },
+    { path: "/write", name: "write", component: WriteView },
+    { path: "/workbench", name: "workbench", component: WorkbenchView },
+    { path: "/pdf", name: "pdf", component: PdfView },
+  ],
+});
+
+createApp(App).use(router).mount("#app");
