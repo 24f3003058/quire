@@ -12,6 +12,8 @@ pub use library::{
     import_bib_file, export_bib_file,
     // metadata fetch
     fetch_doi_metadata, fetch_arxiv_metadata, fetch_isbn_metadata,
+    // translator
+    translate_url,
     // attachments
     pick_and_attach_file, get_item_attachments, read_attachment_bytes,
     open_attachment_external, remove_attachment,
@@ -683,6 +685,7 @@ pub fn run() {
             fetch_doi_metadata,
             fetch_arxiv_metadata,
             fetch_isbn_metadata,
+            translate_url,
             // Library — attachments
             pick_and_attach_file,
             get_item_attachments,

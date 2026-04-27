@@ -5,6 +5,7 @@ import { invoke } from '@tauri-apps/api/core'
 import { useLibrary, type LibraryItem, type Attachment, type ImportResult } from '../composables/useLibrary'
 import LibraryEntryForm from '../components/LibraryEntryForm.vue'
 import CollectionsSidebar from '../components/CollectionsSidebar.vue'
+import TranslatorPanel from '../components/TranslatorPanel.vue'
 
 const router = useRouter()
 
@@ -112,6 +113,7 @@ function clearFilters() {
 
 // ── Import ────────────────────────────────────────────────────────────────────
 
+const translatorOpen   = ref(false)
 const importOpen       = ref(false)
 const importFilePath   = ref('')
 const importMode       = ref<'merge' | 'replace'>('merge')
@@ -367,6 +369,14 @@ const countLabel = computed(() => {
               </svg>
             </button>
           </div>
+          <button class="toolbar-btn toolbar-btn-accent" @click="translatorOpen = true" title="Add from URL / DOI / arXiv / ISBN">
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="8" cy="8" r="6.5"/>
+              <line x1="8" y1="5" x2="8" y2="11"/>
+              <line x1="5" y1="8" x2="11" y2="8"/>
+            </svg>
+            Add from URL
+          </button>
           <button class="toolbar-btn" @click="importOpen = true" title="Import .bib file">
             <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
               <path d="M6 1v7M3 5l3 3 3-3"/>
@@ -667,6 +677,15 @@ const countLabel = computed(() => {
     @saved="onFormSaved"
   />
 
+  <!-- Translator panel -->
+  <Teleport to="body">
+    <TranslatorPanel
+      v-if="translatorOpen"
+      @close="translatorOpen = false"
+      @added="translatorOpen = false"
+    />
+  </Teleport>
+
   <!-- Import modal -->
   <Teleport to="body">
     <div class="confirm-backdrop" v-if="importOpen" @click.self="closeImport">
@@ -845,6 +864,12 @@ const countLabel = computed(() => {
 }
 .toolbar-btn:hover:not(:disabled) { background: var(--bg-chrome-active); color: var(--text); }
 .toolbar-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.toolbar-btn-accent {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.toolbar-btn-accent:hover:not(:disabled) { background: var(--accent); opacity: 0.85; color: #fff; }
 
 .add-btn {
   flex-shrink: 0;

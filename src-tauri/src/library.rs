@@ -1598,3 +1598,170 @@ pub fn load_workbench_state(doc_path: String) -> Result<Option<String>, String> 
     if !p.exists() { return Ok(None); }
     fs::read_to_string(p).map(Some).map_err(|e| e.to_string())
 }
+
+// ── Universal translator ───────────────────────────────────────────────────────
+
+fn detect_arxiv_id(s: &str) -> Option<String> {
+    // https://arxiv.org/abs/2301.04567  or  https://arxiv.org/pdf/2301.04567v2
+    for marker in &["arxiv.org/abs/", "arxiv.org/pdf/"] {
+        if let Some(pos) = s.to_lowercase().find(marker) {
+            let rest = &s[pos + marker.len()..];
+            let id = rest.split(&['?', '#', 'v'][..]).next().unwrap_or(rest);
+            if !id.is_empty() { return Some(id.to_string()); }
+        }
+    }
+    // arXiv:2301.04567  or  arxiv:2301.04567
+    if let Some(rest) = s.strip_prefix("arXiv:").or_else(|| s.strip_prefix("arxiv:")) {
+        return Some(rest.split('v').next().unwrap_or(rest).to_string());
+    }
+    // Bare numeric  YYMM.NNNNN
+    let bare = s.split('/').last().unwrap_or(s);
+    let parts: Vec<&str> = bare.splitn(2, '.').collect();
+    if parts.len() == 2
+        && parts[0].len() == 4 && parts[0].chars().all(|c| c.is_ascii_digit())
+        && parts[1].len() >= 4  && parts[1].chars().next().map_or(false, |c| c.is_ascii_digit())
+    {
+        return Some(bare.to_string());
+    }
+    None
+}
+
+fn detect_isbn(s: &str) -> Option<String> {
+    let stripped = s.strip_prefix("isbn:")
+        .or_else(|| s.strip_prefix("ISBN:"))
+        .unwrap_or(s);
+    let digits: String = stripped.chars().filter(|c| c.is_ascii_alphanumeric()).collect();
+    if digits.len() == 10 || digits.len() == 13 {
+        let valid = digits.chars().enumerate().all(|(i, c)| {
+            c.is_ascii_digit() || ((i == 9) && (c == 'X' || c == 'x'))
+        });
+        if valid { return Some(digits); }
+    }
+    None
+}
+
+fn is_doi_input(s: &str) -> bool {
+    let low = s.to_lowercase();
+    low.starts_with("10.")
+        || low.starts_with("doi:")
+        || low.contains("doi.org/10.")
+}
+
+/// Extract a single `<meta name/property="..." content="...">` value (case-insensitive name).
+fn html_meta(html: &str, names: &[&str]) -> Option<String> {
+    let low = html.to_lowercase();
+    for name in names {
+        let nl = name.to_lowercase();
+        for attr in &["name", "property"] {
+            for (qo, qc) in &[('"', '"'), ('\'', '\'')] {
+                let pat = format!(r#"{}={}{}{} content={}"#, attr, qo, nl, qc, qo);
+                if let Some(pos) = low.find(&pat) {
+                    let start = pos + pat.len();
+                    if let Some(end) = html[start..].find(*qc) {
+                        let v = html[start..start + end].trim();
+                        if !v.is_empty() { return Some(v.to_string()); }
+                    }
+                }
+            }
+        }
+    }
+    None
+}
+
+/// Extract all occurrences of a meta tag (for citation_author which repeats).
+fn html_meta_all(html: &str, name: &str) -> Vec<String> {
+    let low = html.to_lowercase();
+    let nl = name.to_lowercase();
+    let mut results = Vec::new();
+    let mut offset = 0usize;
+    loop {
+        let pat = format!(r#"name="{}" content=""#, nl);
+        let Some(rel) = low[offset..].find(&pat) else { break };
+        let start = offset + rel + pat.len();
+        if let Some(end) = html[start..].find('"') {
+            let v = html[start..start + end].trim();
+            if !v.is_empty() { results.push(v.to_string()); }
+        }
+        offset = start;
+    }
+    results
+}
+
+async fn scrape_url(url: &str) -> Result<FetchedMetadata, String> {
+    let client = reqwest::Client::builder()
+        .user_agent("Mozilla/5.0 (compatible; Quire/1.0)")
+        .connect_timeout(std::time::Duration::from_secs(8))
+        .timeout(std::time::Duration::from_secs(15))
+        .build().map_err(|e| e.to_string())?;
+
+    let html = tokio::time::timeout(
+        std::time::Duration::from_secs(15),
+        client.get(url).send(),
+    ).await.map_err(|_| "Request timed out".to_string())?
+     .map_err(|e| format!("Fetch failed: {e}"))?
+     .text().await.map_err(|e| e.to_string())?;
+
+    // Try to extract a DOI first — delegate to CrossRef for richer data
+    let meta_doi = html_meta(&html, &["citation_doi", "dc.identifier", "DC.Identifier", "prism.doi"])
+        .or_else(|| {
+            html.find("doi.org/10.").map(|i| {
+                let s = &html[i + 8..];
+                s.split(|c: char| matches!(c, '"' | '\'' | '<' | ' ' | '&' | '\n'))
+                 .next().unwrap_or("").to_string()
+            }).filter(|s| s.starts_with("10."))
+        });
+
+    if let Some(doi) = &meta_doi {
+        if !doi.is_empty() {
+            if let Ok(mut entry) = fetch_doi_metadata(doi.clone()).await {
+                if entry.url.is_none() { entry.url = Some(url.to_string()); }
+                return Ok(entry);
+            }
+        }
+    }
+
+    // Full meta-tag fallback
+    let title = html_meta(&html, &["citation_title", "dc.title", "DC.Title", "og:title"]);
+    let author_list = html_meta_all(&html, "citation_author");
+    let authors = if !author_list.is_empty() {
+        Some(author_list.join(" and "))
+    } else {
+        html_meta(&html, &["dc.creator", "DC.Creator"])
+    };
+    let year = html_meta(&html, &[
+        "citation_publication_date", "citation_date", "dc.date", "DC.Date", "citation_year",
+    ]).and_then(|d| d.get(..4).map(String::from));
+    let journal   = html_meta(&html, &["citation_journal_title", "citation_conference_title", "prism.publicationName"]);
+    let volume    = html_meta(&html, &["citation_volume", "prism.volume"]);
+    let issue     = html_meta(&html, &["citation_issue", "prism.number"]);
+    let pages     = html_meta(&html, &["citation_firstpage"]);
+    let publisher = html_meta(&html, &["citation_publisher", "dc.publisher"]);
+    let abstract_text = html_meta(&html, &["citation_abstract", "dc.description", "og:description"]);
+
+    Ok(FetchedMetadata {
+        title, authors, year, journal, volume, issue, pages, publisher,
+        abstract_text, url: Some(url.to_string()),
+        doi: meta_doi.filter(|d| d.starts_with("10.")),
+        entry_type: Some("article".to_string()),
+        ..Default::default()
+    })
+}
+
+#[tauri::command]
+pub async fn translate_url(input: String) -> Result<FetchedMetadata, String> {
+    let s = input.trim().to_string();
+
+    if let Some(id) = detect_arxiv_id(&s) {
+        return fetch_arxiv_metadata(id).await;
+    }
+    if let Some(isbn) = detect_isbn(&s) {
+        return fetch_isbn_metadata(isbn).await;
+    }
+    if is_doi_input(&s) {
+        return fetch_doi_metadata(s).await;
+    }
+    if s.starts_with("http://") || s.starts_with("https://") {
+        return scrape_url(&s).await;
+    }
+    Err("Could not recognise input. Try a DOI (10.xxx/yyy), arXiv ID (2301.04567), ISBN, or full URL.".to_string())
+}
