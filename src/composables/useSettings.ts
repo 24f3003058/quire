@@ -18,6 +18,9 @@ export interface Settings {
 
   // Zotero
   autoScanZotero: boolean
+
+  // AI
+  claudeApiKey: string
 }
 
 const DEFAULTS: Settings = {
@@ -31,6 +34,7 @@ const DEFAULTS: Settings = {
   quartoPath: 'quarto',
   exportFormat: 'pdf',
   autoScanZotero: false,
+  claudeApiKey: '',
 }
 
 const PAPER_WIDTHS: Record<Settings['paperWidth'], string> = {

@@ -43,6 +43,7 @@ async function handleNew() {
 
 async function handleOpen() {
   emit('close')
+  await router.push('/write')
   await openDocument()
 }
 

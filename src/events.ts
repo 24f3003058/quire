@@ -10,6 +10,19 @@ export type Events = {
   'export:start': void
   'export:done': { outputPath: string }
   'export:error': { message: string }
+  // Command palette dispatched actions
+  'cmd:new-doc': void
+  'cmd:open-file': void
+  'cmd:save': void
+  'cmd:export': void
+  'cmd:toggle-focus': void
+  'cmd:toggle-zen': void
+  'cmd:doi-import': void
+  'cmd:ai-panel': { mode?: 'explain' | 'synthesize' | 'check' }
+  'cmd:bib-dedup': void
+  'cmd:navigate-heading': { headingId: string }
+  'cmd:insert-cite': { citeKey: string }
+  'cmd:section-ref': void
 }
 
 export const emitter = mitt<Events>()

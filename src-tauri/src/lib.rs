@@ -629,6 +629,48 @@ fn clean_bib_braces(s: &str) -> String {
         .join(" ")
 }
 
+// ── Claude AI command ─────────────────────────────────────────────────────────
+
+#[tauri::command]
+async fn ask_claude(api_key: String, prompt: String) -> Result<String, String> {
+    if api_key.trim().is_empty() {
+        return Err("No API key provided. Add your Anthropic API key in Settings.".to_string());
+    }
+    let client = reqwest::Client::builder()
+        .user_agent("Quire/1.0")
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let body = serde_json::json!({
+        "model": "claude-haiku-4-5-20251001",
+        "max_tokens": 1024,
+        "messages": [{ "role": "user", "content": prompt }]
+    });
+
+    let resp = client
+        .post("https://api.anthropic.com/v1/messages")
+        .header("x-api-key", &api_key)
+        .header("anthropic-version", "2023-06-01")
+        .header("content-type", "application/json")
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| format!("Network error: {e}"))?;
+
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let text = resp.text().await.unwrap_or_default();
+        return Err(format!("API error {status}: {text}"));
+    }
+
+    let json: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
+    json["content"][0]["text"]
+        .as_str()
+        .map(|s| s.to_string())
+        .ok_or_else(|| "Unexpected response format from Claude API".to_string())
+}
+
 // ── App entry ─────────────────────────────────────────────────────────────────
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -704,6 +746,8 @@ pub fn run() {
             // Workbench state
             save_workbench_state,
             load_workbench_state,
+            // AI
+            ask_claude,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

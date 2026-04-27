@@ -16,6 +16,7 @@ import { useDocument, type BibEntry, type DocAuthor, type DocHeading } from '../
 import { useFileOps } from '../composables/useFileOps'
 import { useWorkbench } from '../composables/useWorkbench'
 import { openUrl } from '@tauri-apps/plugin-opener'
+import AiPanel from '../components/AiPanel.vue'
 
 // Heading extended with a stable UUID `id` attribute for section cross-references
 const ExtendedHeading = Heading.configure({ levels: [1, 2, 3] }).extend({
@@ -297,6 +298,73 @@ onMounted(() => {
     if (!cite) return
     activeCitation.value = cite
     panelOpen.value = true
+    aiPanelOpen.value = false
+    metaOpen.value = false
+  })
+
+  // ── Command palette action handlers ─────────────────────────────────────────
+
+  emitter.on('cmd:save', async () => {
+    const content = editor.value?.getHTML() ?? ''
+    await saveDocument(content)
+  })
+
+  emitter.on('cmd:open-file', async () => {
+    const body = await openDocument()
+    if (body && editor.value) {
+      editor.value.commands.setContent(body)
+      isDirty.value = false
+    }
+  })
+
+  emitter.on('cmd:toggle-focus', () => {
+    toggleFocusMode()
+  })
+
+  emitter.on('cmd:ai-panel', () => {
+    aiPanelOpen.value = !aiPanelOpen.value
+    if (aiPanelOpen.value) {
+      panelOpen.value = false
+      metaOpen.value = false
+    }
+  })
+
+  emitter.on('cmd:navigate-heading', ({ headingId }) => {
+    if (!editor.value) return
+    let headingPos: number | null = null
+    editor.value.state.doc.descendants((node: any, pos: number) => {
+      if (node.type.name === 'heading' && node.attrs.id === headingId) {
+        headingPos = pos
+        return false
+      }
+    })
+    if (headingPos !== null) {
+      editor.value.chain().setTextSelection((headingPos as number) + 1).scrollIntoView().run()
+    }
+  })
+
+  emitter.on('cmd:insert-cite', ({ citeKey }) => {
+    if (!editor.value) return
+    let maxIndex = 0
+    const usedKeys = new Map<string, number>()
+    editor.value.state.doc.descendants((node: any) => {
+      if (node.type.name === 'citation') {
+        const k: string = node.attrs.citeKey
+        const idx: number = node.attrs.displayIndex
+        if (!usedKeys.has(k)) { usedKeys.set(k, idx); maxIndex = Math.max(maxIndex, idx) }
+      }
+    })
+    const displayIndex = usedKeys.has(citeKey) ? usedKeys.get(citeKey)! : maxIndex + 1
+    editor.value.chain().focus().insertContent({
+      type: 'citation',
+      attrs: { citeKey, displayIndex },
+    }).run()
+  })
+
+  emitter.on('cmd:section-ref', () => {
+    // Type [[ to trigger the SectionRefSuggest extension
+    if (!editor.value) return
+    editor.value.chain().focus().insertContent('[[').run()
   })
 })
 
@@ -307,6 +375,13 @@ onBeforeUnmount(() => {
   emitter.off('cite:hover')
   emitter.off('cite:leave')
   emitter.off('cite:click')
+  emitter.off('cmd:save')
+  emitter.off('cmd:open-file')
+  emitter.off('cmd:toggle-focus')
+  emitter.off('cmd:ai-panel')
+  emitter.off('cmd:navigate-heading')
+  emitter.off('cmd:insert-cite')
+  emitter.off('cmd:section-ref')
   editor.value?.destroy()
   if (hideTimer) clearTimeout(hideTimer)
 })
@@ -345,6 +420,10 @@ function addAuthor() {
 function removeAuthor(i: number) {
   docAuthors.value.splice(i, 1)
 }
+
+// ── AI panel ──────────────────────────────────────────────────────────────────
+
+const aiPanelOpen = ref(false)
 
 // ── Focus mode ────────────────────────────────────────────────────────────────
 
@@ -566,6 +645,11 @@ watchEffect(() => {
           </button>
         </div>
       </div>
+    </Transition>
+
+    <!-- AI panel (slide in) -->
+    <Transition name="panel">
+      <AiPanel v-if="aiPanelOpen" @close="aiPanelOpen = false" />
     </Transition>
 
     <!-- Metadata panel (slide in) -->

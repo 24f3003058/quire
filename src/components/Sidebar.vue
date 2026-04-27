@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { useRoute } from 'vue-router'
 const route = useRoute()
+const emit = defineEmits<{ toggleOutline: [] }>()
+
+defineProps<{ outlineOpen?: boolean }>()
 </script>
 
 <template>
@@ -72,6 +75,20 @@ const route = useRoute()
     </div>
 
     <div class="nav-bottom">
+      <!-- Outline toggle -->
+      <button
+        class="nav-item"
+        :class="{ active: outlineOpen }"
+        title="Document Outline"
+        @click="emit('toggleOutline')"
+      >
+        <svg width="17" height="17" viewBox="0 0 17 17" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="2" y1="4" x2="15" y2="4"/>
+          <line x1="5" y1="8.5" x2="15" y2="8.5"/>
+          <line x1="8" y1="13" x2="15" y2="13"/>
+        </svg>
+      </button>
+
       <router-link
         to="/settings"
         class="nav-item"

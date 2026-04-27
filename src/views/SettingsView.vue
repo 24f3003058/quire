@@ -7,7 +7,7 @@ import { useWorkbench } from '../composables/useWorkbench'
 const { settings, set, reset } = useSettings()
 const { zoteroAvailable, checkZotero, isScanning, scanZotero, lastScanResult } = useWorkbench()
 
-type Section = 'editor' | 'defaults' | 'bibliography' | 'zotero' | 'export' | 'about'
+type Section = 'editor' | 'defaults' | 'bibliography' | 'zotero' | 'ai' | 'export' | 'about'
 const activeSection = ref<Section>('editor')
 
 const sections: { key: Section; label: string; icon: string }[] = [
@@ -15,6 +15,7 @@ const sections: { key: Section; label: string; icon: string }[] = [
   { key: 'defaults',    label: 'Defaults',    icon: 'M8.5 2v13M3 7.5h11M3 12h11' },
   { key: 'bibliography',label: 'Bibliography', icon: 'M3 2.5h2.5v12H3z M7 2.5h2.5v12H7z M11.5 2.5l2.4.9-4.4 11.4-2.4-.9z' },
   { key: 'zotero',      label: 'Zotero',      icon: 'M1.5 5.5L8.5 2L15.5 5.5L8.5 9L1.5 5.5Z M1.5 9.5L8.5 13L15.5 9.5' },
+  { key: 'ai',          label: 'AI',          icon: 'M8.5 2L11 6H14L11.5 8.5L12.5 12L8.5 9.5L4.5 12L5.5 8.5L3 6H6Z' },
   { key: 'export',      label: 'Export',      icon: 'M8.5 1.5v9M5 7l3.5 3.5L12 7 M3.5 13.5h10' },
   { key: 'about',       label: 'About',       icon: 'M8.5 7.5v5M8.5 5V4' },
 ]
@@ -193,74 +194,182 @@ function onFontSlider(e: Event) {
       <!-- ── Bibliography ── -->
       <template v-if="activeSection === 'bibliography'">
         <h2 class="section-title">Bibliography</h2>
+        <p class="section-desc">Your bibliography is the collection of papers, books, and reports you can cite in your documents.</p>
 
-        <div class="setting-group">
-          <div class="setting-label">Global bibliography file</div>
-          <div class="path-display">
-            <code class="path-code">{{ bibPath || '~/.quire/references.bib' }}</code>
-            <span v-if="bibEntryCount !== null" class="path-badge">{{ bibEntryCount }} entries</span>
+        <!-- What is a bibliography -->
+        <div class="info-card">
+          <div class="info-card-icon">
+            <svg width="16" height="16" viewBox="0 0 17 17" fill="none" stroke="var(--accent)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 2.5h2.5v12H3z"/><path d="M7 2.5h2.5v12H7z"/><path d="M11.5 2.5l2.4.9-4.4 11.4-2.4-.9z"/>
+            </svg>
           </div>
-          <div class="setting-desc">
-            All projects share this file. Add entries by editing it directly or via the Library view.
-            A per-project <code>.bib</code> in the same folder as your document takes precedence.
-          </div>
-          <div class="action-row">
-            <button class="btn-primary-sm" @click="reloadBib">Reload bibliography</button>
-            <span v-if="bibReloadMsg" class="action-msg" :class="{ error: bibReloadMsg.startsWith('Error') }">{{ bibReloadMsg }}</span>
+          <div class="info-card-body">
+            <div class="info-card-title">What is this?</div>
+            <div class="info-card-text">
+              Quire keeps all your references in one shared file on your computer.
+              When you type <strong>@</strong> in the editor, it searches this file and lets you insert citations like <strong>[1]</strong>, <strong>[2]</strong>, etc.
+              You manage references through the <strong>Library</strong> view (the books icon in the sidebar).
+            </div>
           </div>
         </div>
 
         <div class="setting-group">
-          <div class="setting-label">Citation style</div>
-          <div class="setting-desc">Only numeric inline citations are supported in this version. CSL support is planned for M2.</div>
-          <div class="chip-disabled">Numeric [1] — active</div>
+          <div class="setting-label">Your reference file</div>
+          <div class="setting-desc">This file on your computer holds all your saved papers and books.</div>
+          <div class="path-display">
+            <code class="path-code">{{ bibPath || '~/.quire/references.bib' }}</code>
+            <span v-if="bibEntryCount !== null" class="path-badge">
+              {{ bibEntryCount }} {{ bibEntryCount === 1 ? 'paper saved' : 'papers saved' }}
+            </span>
+          </div>
+          <div class="action-row">
+            <button class="btn-primary-sm" @click="reloadBib">
+              <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M1 6A5 5 0 1 0 2.5 2.5"/><path d="M1 2v3h3"/>
+              </svg>
+              Sync from file
+            </button>
+            <span v-if="bibReloadMsg" class="action-msg" :class="{ error: bibReloadMsg.startsWith('Error') }">{{ bibReloadMsg }}</span>
+          </div>
+          <div class="setting-desc" style="margin-top:10px;">
+            Use <strong>Sync from file</strong> only if you edited the file manually outside Quire.
+            If you add references through the Library view, this is automatic.
+          </div>
+        </div>
+
+        <div class="setting-group">
+          <div class="setting-label">How citations look in your document</div>
+          <div class="setting-desc">
+            Citations appear as numbered superscripts in your text — e.g. the sentence ends here
+            <span class="cite-example">[1]</span> and a second reference would be <span class="cite-example">[2]</span>.
+            The full reference list is generated on export.
+          </div>
+          <div class="chip-disabled" style="margin-top:10px;">Numeric [1] — currently active</div>
+          <div class="setting-desc" style="margin-top:6px; font-size:11px;">Author-Year style (Popova 2022) is planned for a future version.</div>
         </div>
       </template>
 
       <!-- ── Zotero ── -->
       <template v-if="activeSection === 'zotero'">
         <h2 class="section-title">Zotero Integration</h2>
-        <p class="section-desc">Quire reads Zotero's local SQLite database directly — no API key, no sync, no account.</p>
 
-        <div class="setting-group">
-          <div class="setting-label">Zotero database</div>
-          <div class="status-row">
-            <span class="status-dot" :class="zoteroAvailable ? 'dot-green' : 'dot-orange'"></span>
-            <span>{{ zoteroAvailable === null ? 'Checking…' : zoteroAvailable ? 'Found — ready to import' : 'Not found — open Zotero to create the database' }}</span>
+        <!-- What is Zotero -->
+        <div class="info-card">
+          <div class="info-card-icon">
+            <svg width="16" height="16" viewBox="0 0 17 17" fill="none" stroke="var(--accent)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M1.5 5.5L8.5 2L15.5 5.5L8.5 9L1.5 5.5Z"/>
+              <path d="M1.5 9.5L8.5 13L15.5 9.5"/>
+            </svg>
           </div>
-          <div class="setting-desc">
-            Expected location: <code>~/Zotero/zotero.sqlite</code> or <code>~/Documents/Zotero/zotero.sqlite</code>.
-            Close Zotero before scanning if you get a lock error.
+          <div class="info-card-body">
+            <div class="info-card-title">What is Zotero?</div>
+            <div class="info-card-text">
+              Zotero is a free app researchers use to save papers and highlight text inside PDFs.
+              Quire can read those highlights directly from Zotero on your computer — no login or internet needed —
+              and show them in the <strong>Workbench</strong> view so you can drag them into your writing.
+            </div>
           </div>
         </div>
 
+        <!-- Status -->
         <div class="setting-group">
-          <div class="setting-label">Import highlights</div>
-          <div class="setting-desc">Reads all yellow/coloured highlights from your Zotero library and matches them to your bibliography. Duplicates are skipped automatically.</div>
+          <div class="setting-label">Is Zotero installed?</div>
+          <div class="zotero-status-card" :class="zoteroAvailable ? 'status-ok' : 'status-warn'">
+            <span class="status-dot" :class="zoteroAvailable ? 'dot-green' : 'dot-orange'"></span>
+            <div class="zotero-status-text">
+              <template v-if="zoteroAvailable === null">Checking…</template>
+              <template v-else-if="zoteroAvailable">
+                <strong>Zotero found</strong> — your highlights can be imported.
+              </template>
+              <template v-else>
+                <strong>Zotero not found</strong> — please install Zotero and open it at least once, then come back here.
+                <a class="zotero-link" href="https://www.zotero.org/download" target="_blank">Download Zotero →</a>
+              </template>
+            </div>
+          </div>
+        </div>
+
+        <!-- Import -->
+        <div class="setting-group">
+          <div class="setting-label">Import your highlights</div>
+          <div class="setting-desc">
+            Reads all the text you have highlighted in Zotero PDFs and brings them into Quire's
+            <strong>Workbench</strong> view. Papers in Quire that share the same title or DOI are matched automatically.
+            Re-scanning is safe — duplicates are skipped.
+          </div>
           <div class="action-row">
             <button
               class="btn-primary-sm"
               :disabled="!zoteroAvailable || isScanning"
+              :title="!zoteroAvailable ? 'Install Zotero first' : ''"
               @click="doScan"
-            >{{ isScanning ? 'Scanning…' : 'Scan Zotero now' }}</button>
-            <span v-if="lastScanResult" class="action-msg">
-              {{ lastScanResult.annotationsImported }} imported · {{ lastScanResult.itemsMatched }} papers matched
-              <template v-if="lastScanResult.skippedNoMatch.length">
-                · {{ lastScanResult.skippedNoMatch.length }} unmatched
-              </template>
-            </span>
-            <span v-if="scanError" class="action-msg error">{{ scanError }}</span>
+            >
+              <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M1 6A5 5 0 1 0 2.5 2.5"/><path d="M1 2v3h3"/>
+              </svg>
+              {{ isScanning ? 'Importing highlights…' : 'Import highlights from Zotero' }}
+            </button>
           </div>
+
+          <!-- Scan result -->
+          <div v-if="lastScanResult" class="scan-result-box">
+            <div class="srb-row">
+              <span class="srb-num">{{ lastScanResult.annotationsImported }}</span>
+              <span class="srb-label">new highlights imported</span>
+            </div>
+            <div class="srb-row">
+              <span class="srb-num">{{ lastScanResult.itemsMatched }}</span>
+              <span class="srb-label">papers matched to your library</span>
+            </div>
+            <div class="srb-row" v-if="lastScanResult.skippedNoMatch.length">
+              <span class="srb-num warn">{{ lastScanResult.skippedNoMatch.length }}</span>
+              <span class="srb-label">papers skipped (not in your library yet — add them via Library view first)</span>
+            </div>
+          </div>
+          <div v-if="scanError" class="action-msg error" style="margin-top:10px;">{{ scanError }}</div>
+        </div>
+
+        <!-- Auto scan -->
+        <div class="setting-group">
+          <div class="setting-label">Import automatically on startup</div>
+          <div class="setting-desc">Every time you open Quire, check for new Zotero highlights and import them. Recommended once Zotero is set up.</div>
+          <label class="toggle" style="margin-top:10px;">
+            <input type="checkbox" :checked="settings.autoScanZotero" @change="set('autoScanZotero', ($event.target as HTMLInputElement).checked)" />
+            <span class="toggle-track"><span class="toggle-thumb"></span></span>
+            <span class="toggle-label">{{ settings.autoScanZotero ? 'On — imports on every launch' : 'Off' }}</span>
+          </label>
+        </div>
+      </template>
+
+      <!-- ── AI ── -->
+      <template v-if="activeSection === 'ai'">
+        <h2 class="section-title">AI Writing Assistant</h2>
+
+        <div class="setting-group">
+          <label class="setting-label" for="claude-key">Anthropic API Key</label>
+          <div class="setting-desc">
+            Required for the AI Writing Assistant panel. Get a key at
+            <a href="https://console.anthropic.com" style="color:var(--accent)">console.anthropic.com</a>.
+            Stored locally in your browser — never sent anywhere except the Anthropic API.
+          </div>
+          <input
+            id="claude-key"
+            class="text-input mono"
+            type="password"
+            placeholder="sk-ant-api03-…"
+            :value="settings.claudeApiKey"
+            @input="set('claudeApiKey', ($event.target as HTMLInputElement).value)"
+            autocomplete="off"
+            spellcheck="false"
+          />
         </div>
 
         <div class="setting-group">
-          <div class="setting-label">Scan on launch</div>
-          <div class="setting-desc">Automatically import new Zotero highlights every time Quire starts.</div>
-          <label class="toggle">
-            <input type="checkbox" :checked="settings.autoScanZotero" @change="set('autoScanZotero', ($event.target as HTMLInputElement).checked)" />
-            <span class="toggle-track"><span class="toggle-thumb"></span></span>
-            <span class="toggle-label">{{ settings.autoScanZotero ? 'On' : 'Off' }}</span>
-          </label>
+          <div class="setting-label">Model</div>
+          <div class="setting-desc">
+            The assistant uses <strong>claude-haiku-4-5</strong> — fast and cost-effective for in-editor tasks.
+            The model is fixed and is not configurable.
+          </div>
         </div>
       </template>
 
@@ -683,6 +792,9 @@ function onFontSlider(e: Event) {
 }
 
 .btn-primary-sm {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   padding: 6px 14px;
   background: var(--accent);
   color: #fff;
@@ -716,6 +828,59 @@ function onFontSlider(e: Event) {
 }
 
 .action-msg.error { color: var(--accent-orange); }
+
+/* ── Info card ── */
+.info-card {
+  display: flex;
+  gap: 14px;
+  background: var(--accent-soft);
+  border: 1px solid rgba(10, 95, 191, 0.15);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  margin-bottom: 6px;
+}
+
+.info-card-icon {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.info-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.info-card-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.info-card-text {
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  line-height: 1.55;
+}
+
+.info-card-text strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+/* ── Citation example ── */
+.cite-example {
+  display: inline-block;
+  color: var(--accent);
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: 700;
+  background: var(--accent-soft);
+  padding: 1px 4px;
+  border-radius: 3px;
+}
 
 /* ── Chip disabled ── */
 .chip-disabled {
@@ -784,4 +949,87 @@ function onFontSlider(e: Event) {
 .about-val {
   color: var(--text);
 }
+
+/* ── Zotero status card ── */
+.zotero-status-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 10px;
+  padding: 12px 14px;
+  border-radius: var(--radius);
+  border: 1px solid transparent;
+}
+
+.zotero-status-card.status-ok {
+  background: rgba(52, 199, 89, 0.08);
+  border-color: rgba(52, 199, 89, 0.25);
+}
+
+.zotero-status-card.status-warn {
+  background: rgba(232, 101, 10, 0.07);
+  border-color: rgba(232, 101, 10, 0.22);
+}
+
+.zotero-status-text {
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  line-height: 1.55;
+}
+
+.zotero-status-text strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.zotero-link {
+  display: inline-block;
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--accent);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.zotero-link:hover { text-decoration: underline; }
+
+/* ── Scan result box ── */
+.scan-result-box {
+  margin-top: 14px;
+  padding: 12px 14px;
+  background: var(--bg-chrome);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.srb-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.srb-num {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+  min-width: 28px;
+  text-align: right;
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+.srb-num.warn {
+  color: var(--accent-orange);
+}
+
+.srb-label {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
 </style>

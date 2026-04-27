@@ -1,0 +1,149 @@
+---
+title: "Allergen Labelling Compliance in Packaged Foods: A Cross-Sectional Study of Indian Manufacturers"
+authors:
+  - name: "Neha Gawande"
+    orcid: ""
+    affiliation: "Indian Institute of Technology Madras"
+date: "April 2026"
+format:
+  pdf:
+    documentclass: article
+    geometry: margin=1in
+    fontsize: 12pt
+    linestretch: 1.5
+    toc: true
+    number-sections: true
+bibliography: references.bib
+csl: apa.csl
+---
+
+## Abstract
+
+The inadequate labelling of allergens in packaged foods poses significant public health risks, particularly for the estimated 220–520 million people globally affected by food allergies. This cross-sectional study examines allergen labelling compliance among packaged food manufacturers in India under the Food Safety and Standards (Labelling and Display) Regulations 2020, with comparative reference to EU Regulation 1169/2011 and the US FALCPA. We sampled *n* = 340 SKUs from organised retail in three Indian metro markets (Chennai, Pune, Hyderabad) and coded each product against all three regulatory frameworks. We find systematic gaps in precautionary labelling practice and identify regulatory interpretation ambiguity as a primary source of non-compliance. Overall non-compliance was 31.2% (95% CI: 26.4–36.0%), with peanut and tree nut declarations showing the highest discrepancy rates.
+
+**Keywords:** allergen labelling, food safety, FSSAI, precautionary labelling, packaged food, India
+
+---
+
+## Introduction
+
+Food allergy affects an estimated 1 in 8 consumers [@fda2021] in developed markets, with rising prevalence documented across South Asian populations. Despite regulatory frameworks mandating allergen disclosure, recent systematic reviews indicate that approximately 34% of packaged food products [@popova2022] show discrepancies between declared allergen content and actual ingredient composition.
+
+In the Indian context, the Food Safety and Standards Authority of India (FSSAI) has established a threshold of 10 mg/kg for individual allergen declarations under §4.2.1 of the 2020 Labelling and Display Regulations [@fssai2023]. However, enforcement mechanisms remain inconsistently applied across food category segments, and the definition of precautionary allergen labelling (PAL) — phrases such as "may contain traces of" — remains ambiguous under the current regulatory text.
+
+The foundational challenge is not merely one of regulatory compliance, but of communication design. Precautionary allergen labels such as "may contain" are routinely misinterpreted by consumers [@hadley2019], undermining their protective function even where they are accurately applied. This misinterpretation gap makes it insufficient to evaluate compliance purely by label presence; the communicative adequacy of labels must also be assessed.
+
+This study addresses three research questions:
+
+1. What is the rate of allergen labelling non-compliance among packaged food SKUs in urban Indian retail?
+2. Which allergen categories and product segments show the highest non-compliance rates?
+3. How does Indian regulatory performance compare to EU and US frameworks on the same sample?
+
+---
+
+## Literature Review
+
+### Regulatory Frameworks
+
+Three major allergen labelling frameworks apply to the products in our sample. The **US FALCPA (2004)** mandates plain-language declaration of the eight major allergens (milk, eggs, fish, shellfish, tree nuts, peanuts, wheat, soybeans) and was amended by FASTER Act (2023) to add sesame as a ninth. The **EU Regulation 1169/2011** requires declaration of 14 allergen groups, including cereals containing gluten, and mandates typographic distinction (bold, italic, or underline) to ensure visual salience. The **FSSAI 2020 Regulations** require declaration of 8 allergen groups, broadly aligned with FALCPA, with a quantitative threshold of 10 mg/kg.
+
+### Consumer Comprehension and Label Design
+
+The landscape of allergen labelling research is characterised by a tension between regulatory prescription and real-world consumer behaviour. Foundational work by @hadley2019 established baseline comprehension rates for precautionary labelling across demographically stratified cohorts, finding that education level and prior allergy diagnosis are the primary moderators of label interpretation accuracy. Crucially, 67% of respondents misinterpreted "may contain" as indicating lower risk than a direct ingredient declaration — an inversion of the label's intended meaning.
+
+### Manufacturing-Side Compliance
+
+Subsequent systematic review of manufacturing-side compliance by @popova2022 extended this analysis to the supply chain, demonstrating that discrepancies originate as frequently in ingredient sourcing and cross-contact risk management as in label design. Their meta-analysis of 847 products across 14 countries found peanut and tree nut non-compliance rates approximately 2.3× higher than milk and wheat, consistent with the supply chain complexity of nut sourcing.
+
+---
+
+## Methods
+
+### Study Design
+
+Cross-sectional audit of *n* = 340 SKUs sampled from organised retail in three Indian metro markets: Chennai, Pune, and Hyderabad. Products were selected by stratified random sampling across six FSSAI-defined food categories: bakery products, snack foods, confectionery, ready-to-eat meals, dairy products, and beverages. Sampling was conducted between January and March 2026.
+
+### Coding Protocol
+
+Each SKU was independently coded by two trained coders against three regulatory checklists (FSSAI 2020, EU 1169/2011, FALCPA/FASTER). Coding dimensions included:
+
+- Presence of allergen declaration section
+- Completeness of declared allergens against ingredient list
+- Presence and adequacy of PAL statements
+- Typographic salience of allergen text (EU criterion only)
+- Language of declaration (English, regional language, or both)
+
+Inter-rater reliability was assessed using Cohen's κ. Any disagreements were resolved by a third coder.
+
+### Statistical Analysis
+
+Compliance rate across product categories was modelled as a binomial proportion. The 95% confidence interval for overall non-compliance was computed as:
+
+$$\hat{p} \pm 1.96\sqrt{\frac{\hat{p}(1-\hat{p})}{n}}$$
+
+Inter-rater reliability was assessed using Cohen's κ:
+
+$$\kappa = \frac{p_o - p_e}{1 - p_e}$$
+
+where $p_o$ is observed agreement and $p_e$ is expected agreement by chance. Category-level differences in compliance rates were tested using chi-square with Bonferroni correction for multiple comparisons.
+
+---
+
+## Results
+
+### Sample Characteristics
+
+Of the 340 SKUs sampled, 58 (17.1%) were imported products, 282 (82.9%) were domestically manufactured. Category distribution: bakery (n=72), snacks (n=68), confectionery (n=54), RTE meals (n=61), dairy (n=48), beverages (n=37). Inter-rater reliability was κ = 0.87 (95% CI: 0.83–0.91), indicating strong agreement.
+
+### Overall Compliance
+
+Overall non-compliance under FSSAI 2020 was **31.2%** (106/340; 95% CI: 26.4–36.0%). Under EU 1169/2011, the same sample showed 44.7% non-compliance, primarily driven by the typographic salience requirement. Under FALCPA, non-compliance was 28.8%, marginally lower than FSSAI due to the smaller declared allergen set.
+
+### Non-Compliance by Allergen Category
+
+| Allergen | Non-compliant SKUs | Non-compliance Rate |
+|---|---|---|
+| Peanuts | 38 | 51.4% |
+| Tree nuts | 29 | 44.6% |
+| Wheat/gluten | 19 | 22.4% |
+| Milk | 14 | 16.5% |
+| Soy | 11 | 14.9% |
+| Eggs | 6 | 10.3% |
+| Fish/shellfish | 4 | 8.1% |
+
+Peanut and tree nut non-compliance rates were significantly higher than all other categories (χ² = 31.4, df = 6, *p* < .001 after Bonferroni correction).
+
+### Precautionary Allergen Labelling
+
+Of the 214 products with potential cross-contact risk (as identified from manufacturing facility disclosures), only 89 (41.6%) carried any PAL statement. Of those 89, 34 (38.2%) used non-standard phrasing that has been shown to be misinterpreted by consumers [@hadley2019].
+
+---
+
+## Discussion
+
+### Principal Findings
+
+Our principal finding — 31.2% non-compliance under FSSAI 2020 — is broadly consistent with Popova et al.'s cross-national estimate of 34% [@popova2022], suggesting that Indian packaged food manufacturers perform comparably to the global mean, though still far below the threshold required for adequate public health protection.
+
+The concentration of non-compliance in peanut and tree nut categories is likely attributable to supply chain complexity: both ingredient classes are sourced from multiple origins with varying cross-contact risk profiles, and domestic regulations do not mandate supply chain traceability documentation at the manufacturer level.
+
+### Regulatory Interpretation Gap
+
+A recurring finding across the non-compliant products was evidence of genuine regulatory interpretation ambiguity rather than deliberate non-disclosure. Seventeen manufacturers provided written clarifications during follow-up; of these, 11 cited uncertainty about whether their cross-contact exposure met the 10 mg/kg threshold. This interpretation gap — between regulatory text and manufacturer practice — suggests that compliance improvement requires clearer FSSAI guidance, not simply stronger enforcement.
+
+### Limitations
+
+This study has several limitations. First, the sample was restricted to organised retail in three metro markets; street food, informal retail, and smaller markets may show different compliance profiles. Second, we relied on label text rather than independent laboratory analysis; actual allergen content was not verified. Third, the cross-sectional design cannot assess whether compliance is improving over time.
+
+---
+
+## Conclusion
+
+Allergen labelling non-compliance in Indian packaged food retail is substantial, with nearly one-third of sampled products failing to meet FSSAI 2020 requirements. Non-compliance is disproportionately concentrated in peanut and tree nut declarations and in precautionary labelling, both areas where regulatory text is least precise. We recommend that FSSAI issue supplementary guidance clarifying the PAL threshold criteria and establish a product-category-specific audit cycle for high-risk allergen groups.
+
+---
+
+## References
+
+::: {#refs}
+:::
