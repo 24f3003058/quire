@@ -6,8 +6,10 @@ import WorkbenchView from "./views/WorkbenchView.vue";
 import PdfView from "./views/PdfView.vue";
 import LibraryView from "./views/LibraryView.vue";
 import AnnotationsView from "./views/AnnotationsView.vue";
+import SettingsView from "./views/SettingsView.vue";
 import "./assets/style.css";
 import "./assets/editor.css";
+import "./composables/useSettings";
 
 const router = createRouter({
   history: createWebHashHistory(),
@@ -18,6 +20,7 @@ const router = createRouter({
     { path: "/pdf", name: "pdf", component: PdfView },
     { path: "/library", name: "library", component: LibraryView },
     { path: "/annotations", name: "annotations", component: AnnotationsView },
+    { path: "/settings", name: "settings", component: SettingsView },
   ],
 });
 

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watchEffect } from 'vue'
 import { useRouter } from 'vue-router'
 import { useEditor, EditorContent } from '@tiptap/vue-3'
 import StarterKit from '@tiptap/starter-kit'
@@ -12,8 +12,9 @@ import { SearchAndReplace, searchKey } from '../extensions/SearchAndReplace'
 import { SectionRef } from '../extensions/SectionRef'
 import { SectionRefSuggest } from '../extensions/SectionRefSuggest'
 import { emitter } from '../events'
-import { useDocument, type BibEntry, type DocAuthor } from '../composables/useDocument'
+import { useDocument, type BibEntry, type DocAuthor, type DocHeading } from '../composables/useDocument'
 import { useFileOps } from '../composables/useFileOps'
+import { useWorkbench } from '../composables/useWorkbench'
 import { openUrl } from '@tauri-apps/plugin-opener'
 
 // Heading extended with a stable UUID `id` attribute for section cross-references
@@ -31,8 +32,9 @@ const ExtendedHeading = Heading.configure({ levels: [1, 2, 3] }).extend({
 })
 
 const router = useRouter()
-const { docTitle, docSubtitle, docStatus, docDate, docAuthors, citations, isDirty } = useDocument()
+const { docTitle, docSubtitle, docStatus, docDate, docAuthors, citations, isDirty, docHeadings } = useDocument()
 const { openDocument, saveDocument } = useFileOps()
+const { pendingInsert, setPendingInsert } = useWorkbench()
 
 // ── Editor ────────────────────────────────────────────────────────────────────
 
@@ -79,6 +81,7 @@ const editor = useEditor({
   content: INITIAL_CONTENT,
   onUpdate() {
     isDirty.value = true
+    extractAndUpdateHeadings()
   },
 })
 
@@ -268,6 +271,8 @@ onMounted(() => {
     }
   })
 
+  extractAndUpdateHeadings()
+
   emitter.on('cite:hover', ({ key, rect }) => {
     if (panelOpen.value) return
     cancelHide()
@@ -413,6 +418,51 @@ function affiliationNumbers(author: DocAuthor): number[] {
 function openOrcid(orcid: string) {
   openUrl(`https://orcid.org/${orcid}`).catch(() => {})
 }
+
+// ── Heading extraction ────────────────────────────────────────────────────────
+
+function extractAndUpdateHeadings() {
+  if (!editor.value) return
+  const headings: DocHeading[] = []
+  editor.value.state.doc.descendants((node: any) => {
+    if (node.type.name === 'heading') {
+      headings.push({ id: node.attrs.id ?? null, level: node.attrs.level, text: node.textContent })
+    }
+  })
+  docHeadings.value = headings
+}
+
+// ── Pending workbench insert ──────────────────────────────────────────────────
+
+watchEffect(() => {
+  const ann = pendingInsert.value
+  if (!ann || !editor.value) return
+
+  const usedKeys = new Map<string, number>()
+  let maxIndex = 0
+  editor.value.state.doc.descendants((node: any) => {
+    if (node.type.name === 'citation') {
+      const k: string = node.attrs.citeKey
+      const idx: number = node.attrs.displayIndex
+      if (!usedKeys.has(k)) { usedKeys.set(k, idx); maxIndex = Math.max(maxIndex, idx) }
+    }
+  })
+  const displayIndex = usedKeys.has(ann.itemKey) ? usedKeys.get(ann.itemKey)! : maxIndex + 1
+
+  editor.value.chain().focus().insertContent({
+    type: 'blockquote',
+    content: [{
+      type: 'paragraph',
+      content: [
+        { type: 'text', text: ann.selectedText || '' },
+        { type: 'text', text: ' ' },
+        { type: 'citation', attrs: { citeKey: ann.itemKey, displayIndex } },
+      ],
+    }],
+  }).run()
+
+  setPendingInsert(null)
+})
 </script>
 
 <template>
@@ -730,7 +780,7 @@ function openOrcid(orcid: string) {
 
 .paper {
   width: 100%;
-  max-width: 660px;
+  max-width: var(--paper-max-width);
   background: var(--surface-solid);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow);

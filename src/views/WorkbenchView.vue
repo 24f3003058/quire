@@ -1,187 +1,234 @@
 <script setup lang="ts">
-interface Annotation {
-  id: number
-  source: string
-  page: string
-  color: string
-  stat: string
-  statLabel: string
-  note: string
-}
+import { ref, computed, onMounted, watch } from 'vue'
+import { useRouter } from 'vue-router'
+import { useAllAnnotations, type AnnotationWithSource } from '../composables/useAnnotations'
+import { useWorkbench } from '../composables/useWorkbench'
+import { useDocument } from '../composables/useDocument'
 
-interface OutlineSection {
-  id: number
+const router = useRouter()
+const { allAnnotations, allAnnotationsLoading, loadAll } = useAllAnnotations()
+const {
+  dismissedIds, isScanning, lastScanResult, zoteroAvailable,
+  checkZotero, scanZotero, dismiss, undismiss, setPendingInsert, loadState,
+} = useWorkbench()
+const { docHeadings, filePath } = useDocument()
+
+const showDismissed = ref(false)
+const scanError = ref<string | null>(null)
+
+watch(filePath, async (p) => { if (p) await loadState() }, { immediate: true })
+
+onMounted(async () => {
+  await Promise.all([checkZotero(), loadAll()])
+})
+
+interface SourceGroup {
+  key: string
   title: string
-  status: 'done' | 'in-progress' | 'draft' | 'empty'
-  words: number
+  authors: string
+  year: string
+  annotations: AnnotationWithSource[]
 }
 
-const annotations: Annotation[] = [
-  {
-    id: 1,
-    source: 'Popova et al. 2022',
-    page: 'p. 847',
-    color: '#0A5FBF',
-    stat: '34%',
-    statLabel: 'non-compliance rate across 14 countries',
-    note: 'Key baseline for RQ2. Pre-pandemic. Cross-check with FSSAI methodology.',
-  },
-  {
-    id: 2,
-    source: 'Popova et al. 2022',
-    page: 'p. 312',
-    color: '#0A5FBF',
-    stat: '#1',
-    statLabel: 'peanut — highest non-compliance category',
-    note: 'Supports focus on peanut/tree nut subset in methods section.',
-  },
-  {
-    id: 3,
-    source: 'FDA 2021',
-    page: '§3.2',
-    color: '#C95708',
-    stat: '1 in 8',
-    statLabel: 'consumers affected by labelling failures',
-    note: 'Consumer survey n=12,400, not clinical data. Worth footnoting.',
-  },
-  {
-    id: 4,
-    source: 'FDA 2021',
-    page: '§2.1',
-    color: '#C95708',
-    stat: '24 mo',
-    statLabel: 'surveillance period studied',
-    note: 'Defines scope. Good for methodology comparison with our cross-sectional design.',
-  },
-  {
-    id: 5,
-    source: 'Hadley & King 2019',
-    page: 'p. 4',
-    color: '#16963F',
-    stat: '2019',
-    statLabel: 'baseline cohort for PAL comprehension',
-    note: 'Foundational paper for lit review. PAL interpretation varies by education level.',
-  },
-  {
-    id: 6,
-    source: 'Hadley & King 2019',
-    page: 'p. 11',
-    color: '#16963F',
-    stat: '67%',
-    statLabel: '"may contain" misinterpretation rate',
-    note: 'Directly applicable to our FSSAI policy recommendations section.',
-  },
-  {
-    id: 7,
-    source: 'FSSAI 2023',
-    page: '§4.2.1',
-    color: '#6D28D9',
-    stat: '10 mg/kg',
-    statLabel: 'allergen declaration threshold',
-    note: 'Regulatory baseline. Verify on FSSAI website — may have been updated.',
-  },
-]
+const groupedAnnotations = computed<SourceGroup[]>(() => {
+  const visible = allAnnotations.value.filter(
+    a => showDismissed.value || !dismissedIds.value.has(a.id),
+  )
+  const groups = new Map<string, SourceGroup>()
+  for (const ann of visible) {
+    if (!groups.has(ann.itemKey)) {
+      groups.set(ann.itemKey, {
+        key: ann.itemKey,
+        title: ann.itemTitle || ann.itemKey,
+        authors: ann.itemAuthors || '',
+        year: ann.itemYear || '',
+        annotations: [],
+      })
+    }
+    groups.get(ann.itemKey)!.annotations.push(ann)
+  }
+  return [...groups.values()]
+})
 
-const outline: OutlineSection[] = [
-  { id: 1, title: 'Abstract', status: 'done', words: 187 },
-  { id: 2, title: '1. Introduction', status: 'done', words: 412 },
-  { id: 3, title: '2. Literature Review', status: 'in-progress', words: 634 },
-  { id: 4, title: '3. Methods', status: 'in-progress', words: 298 },
-  { id: 5, title: '4. Results', status: 'draft', words: 185 },
-  { id: 6, title: '5. Discussion', status: 'empty', words: 0 },
-  { id: 7, title: '6. Conclusion', status: 'empty', words: 0 },
-]
+const dismissedCount = computed(
+  () => allAnnotations.value.filter(a => dismissedIds.value.has(a.id)).length,
+)
+
+const totalCount = computed(() => allAnnotations.value.length)
+
+async function doScan() {
+  scanError.value = null
+  try {
+    await scanZotero()
+    await loadAll()
+  } catch (e) {
+    scanError.value = String(e)
+  }
+}
+
+function sendToDraft(ann: AnnotationWithSource) {
+  setPendingInsert(ann)
+  router.push('/write')
+}
+
+function truncate(text: string, len: number) {
+  if (text.length <= len) return text
+  return text.slice(0, len) + '…'
+}
+
+function authorShort(authors: string): string {
+  if (!authors) return ''
+  const first = authors.split(/[,;&]|and\s/i)[0].trim()
+  const last = first.split(/\s+/).pop() ?? first
+  return last
+}
 </script>
 
 <template>
   <div class="workbench">
+
     <!-- Banner -->
     <div class="wb-banner">
-      <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M1 4L6.5 1L12 4L6.5 7L1 4Z"/>
-        <path d="M1 7.5L6.5 10.5L12 7.5"/>
-        <path d="M1 10.5L6.5 13.5L12 10.5"/>
-      </svg>
-      <span><strong>7 annotations</strong> imported from 4 sources — Allergen Labelling Study</span>
+      <div class="wb-banner-left">
+        <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M1 4L6.5 1L12 4L6.5 7L1 4Z"/>
+          <path d="M1 7.5L6.5 10.5L12 7.5"/>
+          <path d="M1 10.5L6.5 13.5L12 10.5"/>
+        </svg>
+        <span v-if="allAnnotationsLoading">Loading…</span>
+        <span v-else-if="totalCount === 0">No annotations yet</span>
+        <span v-else>
+          <strong>{{ totalCount }} annotation{{ totalCount === 1 ? '' : 's' }}</strong>
+          from {{ groupedAnnotations.length + (showDismissed ? 0 : dismissedCount > 0 ? 0 : 0) }} source{{ groupedAnnotations.length === 1 ? '' : 's' }}
+        </span>
+        <span v-if="lastScanResult" class="scan-result">
+          — {{ lastScanResult.annotationsImported }} new
+          <template v-if="lastScanResult.skippedNoMatch.length > 0">
+            · {{ lastScanResult.skippedNoMatch.length }} unmatched
+          </template>
+        </span>
+        <span v-if="scanError" class="scan-error">{{ scanError }}</span>
+      </div>
+      <div class="wb-banner-right">
+        <button
+          v-if="dismissedCount > 0"
+          class="btn-ghost btn-xs"
+          @click="showDismissed = !showDismissed"
+        >
+          {{ showDismissed ? 'Hide' : 'Show' }} dismissed ({{ dismissedCount }})
+        </button>
+        <button
+          class="btn-scan"
+          :disabled="isScanning || zoteroAvailable === false"
+          :title="zoteroAvailable === false ? 'Zotero database not found' : 'Import highlights from Zotero'"
+          @click="doScan"
+        >
+          <svg v-if="isScanning" class="spin" width="11" height="11" viewBox="0 0 11 11" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M5.5 1v2M5.5 8v2M1 5.5H3M8 5.5h2M2.3 2.3l1.4 1.4M7.3 7.3l1.4 1.4M2.3 8.7l1.4-1.4M7.3 3.7l1.4-1.4" stroke-linecap="round"/>
+          </svg>
+          <svg v-else width="11" height="11" viewBox="0 0 11 11" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+            <path d="M5.5 1.5v8M1.5 5.5l4-4 4 4"/>
+          </svg>
+          {{ isScanning ? 'Scanning…' : 'Scan Zotero' }}
+        </button>
+      </div>
     </div>
 
-    <!-- Body: annotations + outline -->
+    <!-- Body -->
     <div class="wb-body">
-      <!-- Left: annotation blocks -->
+
+      <!-- Annotation column -->
       <div class="ann-col">
         <div class="col-label">Annotations</div>
-        <div class="ann-list">
-          <div
-            v-for="ann in annotations"
-            :key="ann.id"
-            class="ann-card"
-            :style="{ borderLeftColor: ann.color }"
-          >
-            <div class="ann-top-row">
-              <span class="ann-stat" :style="{ color: ann.color }">{{ ann.stat }}</span>
-              <span class="ann-drag-handle" title="Drag to outline">
-                <svg width="11" height="11" viewBox="0 0 11 11" fill="currentColor">
-                  <circle cx="3.5" cy="2.5" r="1"/>
-                  <circle cx="7.5" cy="2.5" r="1"/>
-                  <circle cx="3.5" cy="5.5" r="1"/>
-                  <circle cx="7.5" cy="5.5" r="1"/>
-                  <circle cx="3.5" cy="8.5" r="1"/>
-                  <circle cx="7.5" cy="8.5" r="1"/>
-                </svg>
-              </span>
+
+        <!-- Empty state -->
+        <div v-if="!allAnnotationsLoading && totalCount === 0" class="empty-state">
+          <svg width="28" height="28" viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="1.3" opacity="0.35">
+            <rect x="4" y="4" width="20" height="20" rx="3"/>
+            <line x1="9" y1="10" x2="19" y2="10"/>
+            <line x1="9" y1="14" x2="16" y2="14"/>
+            <line x1="9" y1="18" x2="13" y2="18"/>
+          </svg>
+          <p>No annotations yet.</p>
+          <p class="empty-sub">Click <strong>Scan Zotero</strong> to import highlights from your Zotero library.</p>
+        </div>
+
+        <!-- Grouped annotation cards -->
+        <div v-else class="ann-scroll">
+          <template v-for="group in groupedAnnotations" :key="group.key">
+            <div class="source-header">
+              <span class="source-title">{{ truncate(group.title, 52) }}</span>
+              <span class="source-meta">{{ authorShort(group.authors) }}{{ group.year ? ' ' + group.year : '' }} · {{ group.annotations.length }}</span>
             </div>
-            <div class="ann-stat-label">{{ ann.statLabel }}</div>
-            <div class="ann-source-row">
-              <span class="ann-source-name" :style="{ color: ann.color }">{{ ann.source }}</span>
-              <span class="ann-page">{{ ann.page }}</span>
+            <div class="ann-grid">
+              <div
+                v-for="ann in group.annotations"
+                :key="ann.id"
+                class="ann-card"
+                :class="{ dismissed: dismissedIds.has(ann.id) }"
+                :style="{ borderLeftColor: ann.color }"
+              >
+                <div class="ann-text">{{ truncate(ann.selectedText || '', 160) }}</div>
+                <div class="ann-source-row">
+                  <span class="ann-page" :style="{ color: ann.color }">p.&nbsp;{{ ann.page }}</span>
+                  <span v-if="ann.noteText" class="ann-note">{{ truncate(ann.noteText, 80) }}</span>
+                </div>
+                <div class="ann-actions">
+                  <button
+                    class="btn-draft"
+                    title="Insert as blockquote in document"
+                    @click="sendToDraft(ann)"
+                  >
+                    → Draft
+                  </button>
+                  <button
+                    v-if="!dismissedIds.has(ann.id)"
+                    class="btn-dismiss"
+                    title="Dismiss"
+                    @click="dismiss(ann.id)"
+                  >
+                    ×
+                  </button>
+                  <button
+                    v-else
+                    class="btn-undismiss"
+                    title="Restore"
+                    @click="undismiss(ann.id)"
+                  >
+                    ↩
+                  </button>
+                </div>
+              </div>
             </div>
-            <div class="ann-note-text">{{ ann.note }}</div>
-          </div>
+          </template>
         </div>
       </div>
 
-      <!-- Right: draft outline -->
+      <!-- Outline column -->
       <div class="outline-col">
         <div class="col-label">Draft Outline</div>
-        <div class="outline-list">
-          <div v-for="sec in outline" :key="sec.id" class="outline-row">
-            <!-- Status icon -->
+
+        <div v-if="docHeadings.length === 0" class="outline-empty">
+          <span>Open a document to see its structure here.</span>
+        </div>
+
+        <div v-else class="outline-list">
+          <div
+            v-for="(h, i) in docHeadings"
+            :key="i"
+            class="outline-row"
+            :class="`h${h.level}`"
+          >
             <div class="out-status">
-              <template v-if="sec.status === 'done'">
-                <svg width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="#16963F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M2 6.5l3 3 6-6"/>
-                </svg>
-              </template>
-              <template v-else-if="sec.status === 'in-progress'">
-                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="#C95708" stroke-width="1.5">
-                  <circle cx="6" cy="6" r="4.5"/>
-                  <path d="M6 3.5V6l1.5 1.5" stroke-linecap="round"/>
-                </svg>
-              </template>
-              <template v-else-if="sec.status === 'draft'">
-                <div class="status-dot-filled"></div>
-              </template>
-              <template v-else>
-                <div class="status-dot-empty"></div>
-              </template>
+              <div v-if="h.level === 1" class="status-dot-h1"></div>
+              <div v-else-if="h.level === 2" class="status-dot-h2"></div>
+              <div v-else class="status-dot-h3"></div>
             </div>
-
-            <!-- Title + word count -->
-            <div class="out-text">
-              <span class="out-title" :class="{ 'out-empty': sec.status === 'empty' }">{{ sec.title }}</span>
-              <span v-if="sec.words > 0" class="out-words">{{ sec.words }}w</span>
-            </div>
-
-            <!-- Pull annotation button -->
-            <button class="out-pull" title="Pull annotation here">
-              <svg width="11" height="11" viewBox="0 0 11 11" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
-                <line x1="5.5" y1="1" x2="5.5" y2="10"/>
-                <line x1="1" y1="5.5" x2="10" y2="5.5"/>
-              </svg>
-            </button>
+            <span class="out-title" :class="{ 'out-sub': h.level > 1 }">{{ h.text }}</span>
           </div>
         </div>
       </div>
+
     </div>
   </div>
 </template>
@@ -194,11 +241,13 @@ const outline: OutlineSection[] = [
   overflow: hidden;
 }
 
+/* ── Banner ── */
 .wb-banner {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 8px;
-  padding: 7px 18px;
+  padding: 7px 14px;
   background: rgba(10, 95, 191, 0.05);
   border-bottom: 1px solid rgba(10, 95, 191, 0.1);
   font-size: 12px;
@@ -216,13 +265,86 @@ const outline: OutlineSection[] = [
   font-weight: 600;
 }
 
+.wb-banner-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+}
+
+.wb-banner-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.scan-result {
+  color: var(--accent);
+  font-size: 11px;
+}
+
+.scan-error {
+  color: var(--accent-orange);
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 260px;
+}
+
+.btn-scan {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: 11.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: opacity var(--t);
+}
+
+.btn-scan:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.btn-scan:not(:disabled):hover { opacity: 0.85; }
+
+.btn-ghost {
+  background: none;
+  border: 1px solid var(--border-medium);
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 3px 8px;
+  transition: background var(--t), color var(--t);
+}
+
+.btn-ghost:hover {
+  background: var(--bg-chrome-active);
+  color: var(--text);
+}
+
+.btn-xs { font-size: 10.5px; padding: 2px 6px; }
+
+@keyframes spin { to { transform: rotate(360deg); } }
+.spin { animation: spin 0.9s linear infinite; }
+
+/* ── Body ── */
 .wb-body {
   display: flex;
   flex: 1;
   overflow: hidden;
 }
 
-/* Annotation column */
+/* ── Annotation column ── */
 .ann-col {
   flex: 1;
   display: flex;
@@ -230,16 +352,6 @@ const outline: OutlineSection[] = [
   overflow: hidden;
   border-right: 1px solid var(--border);
   min-width: 0;
-}
-
-/* Outline column */
-.outline-col {
-  width: 260px;
-  flex-shrink: 0;
-  background: var(--bg-chrome);
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
 }
 
 .col-label {
@@ -253,14 +365,62 @@ const outline: OutlineSection[] = [
   flex-shrink: 0;
 }
 
-.ann-list {
-  padding: 14px 18px;
+.empty-state {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: var(--text-tertiary);
+  font-size: 13px;
+  padding: 32px 24px;
+  text-align: center;
+}
+
+.empty-state svg { margin-bottom: 4px; }
+.empty-state p { margin: 0; }
+.empty-sub { font-size: 12px; color: var(--text-tertiary); }
+.empty-sub strong { color: var(--text-secondary); }
+
+.ann-scroll {
+  flex: 1;
   overflow-y: auto;
+  padding: 10px 16px 16px;
+}
+
+.source-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 2px 5px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 7px;
+}
+
+.source-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+  min-width: 0;
+}
+
+.source-meta {
+  font-size: 10.5px;
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+}
+
+.ann-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 9px;
-  align-content: start;
-  flex: 1;
+  gap: 8px;
+  margin-bottom: 6px;
 }
 
 .ann-card {
@@ -268,13 +428,12 @@ const outline: OutlineSection[] = [
   border-radius: var(--radius);
   border: 1px solid var(--border);
   border-left-width: 3px;
-  padding: 11px 13px;
+  padding: 10px 12px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 5px;
   box-shadow: var(--shadow-xs);
-  transition: box-shadow var(--t), transform var(--t);
-  cursor: default;
+  transition: box-shadow var(--t), transform var(--t), opacity var(--t);
 }
 
 .ann-card:hover {
@@ -282,142 +441,67 @@ const outline: OutlineSection[] = [
   transform: translateY(-1px);
 }
 
-.ann-top-row {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
+.ann-card.dismissed {
+  opacity: 0.45;
 }
 
-.ann-stat {
-  font-size: 22px;
-  font-weight: 800;
-  letter-spacing: -0.03em;
-  line-height: 1;
-  font-family: var(--font-ui);
-}
-
-.ann-drag-handle {
-  color: var(--text-tertiary);
-  cursor: grab;
-  padding: 2px;
-  opacity: 0;
-  transition: opacity var(--t);
-}
-
-.ann-card:hover .ann-drag-handle {
-  opacity: 1;
-}
-
-.ann-stat-label {
-  font-size: 11.5px;
-  font-weight: 500;
+.ann-text {
+  font-size: 12px;
   color: var(--text);
-  line-height: 1.35;
+  line-height: 1.45;
+  font-family: var(--font-doc);
+  font-style: italic;
 }
 
 .ann-source-row {
   display: flex;
-  align-items: center;
-  gap: 5px;
-}
-
-.ann-source-name {
-  font-size: 10px;
-  font-weight: 700;
+  align-items: baseline;
+  gap: 6px;
 }
 
 .ann-page {
-  font-size: 10px;
-  color: var(--text-tertiary);
+  font-size: 10.5px;
+  font-weight: 700;
+  flex-shrink: 0;
 }
 
-.ann-note-text {
-  font-size: 11px;
-  color: var(--text-secondary);
+.ann-note {
+  font-size: 10.5px;
+  color: var(--text-tertiary);
   font-style: italic;
-  line-height: 1.45;
-  padding-top: 5px;
-  border-top: 1px solid var(--border);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ann-actions {
+  display: flex;
+  align-items: center;
+  gap: 5px;
   margin-top: 2px;
 }
 
-/* Outline */
-.outline-list {
-  padding: 10px 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  overflow-y: auto;
+.btn-draft {
   flex: 1;
-}
-
-.outline-row {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  padding: 7px 8px;
+  background: var(--accent-soft, rgba(10,95,191,0.07));
+  border: 1px solid rgba(10, 95, 191, 0.18);
   border-radius: var(--radius-sm);
-  transition: background var(--t);
+  color: var(--accent);
+  font-size: 10.5px;
+  font-weight: 600;
+  padding: 4px 8px;
   cursor: pointer;
-}
-
-.outline-row:hover {
-  background: var(--bg-chrome-active);
-}
-
-.out-status {
-  width: 16px;
-  height: 16px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-
-.status-dot-filled {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--text-tertiary);
-}
-
-.status-dot-empty {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  border: 1.5px solid var(--border-medium);
-}
-
-.out-text {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 6px;
-  overflow: hidden;
-  min-width: 0;
-}
-
-.out-title {
-  font-size: 12.5px;
-  color: var(--text);
+  transition: background var(--t), border-color var(--t);
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
-.out-empty {
-  color: var(--text-tertiary);
+.btn-draft:hover {
+  background: rgba(10, 95, 191, 0.14);
+  border-color: rgba(10, 95, 191, 0.3);
 }
 
-.out-words {
-  font-size: 10px;
-  color: var(--text-tertiary);
-  flex-shrink: 0;
-  font-variant-numeric: tabular-nums;
-}
-
-.out-pull {
+.btn-dismiss,
+.btn-undismiss {
   background: none;
   border: 1px solid transparent;
   width: 22px;
@@ -426,20 +510,114 @@ const outline: OutlineSection[] = [
   display: flex;
   align-items: center;
   justify-content: center;
+  font-size: 14px;
+  line-height: 1;
   color: var(--text-tertiary);
   cursor: pointer;
-  opacity: 0;
-  transition: opacity var(--t), background var(--t), border-color var(--t), color var(--t);
+  transition: background var(--t), color var(--t), border-color var(--t);
   flex-shrink: 0;
 }
 
-.outline-row:hover .out-pull {
-  opacity: 1;
+.btn-dismiss:hover {
+  background: rgba(232, 101, 10, 0.1);
+  border-color: rgba(232, 101, 10, 0.2);
+  color: var(--accent-orange);
 }
 
-.out-pull:hover {
-  background: var(--accent-soft);
+.btn-undismiss:hover {
+  background: var(--accent-soft, rgba(10,95,191,0.07));
   border-color: rgba(10, 95, 191, 0.2);
   color: var(--accent);
+}
+
+/* ── Outline column ── */
+.outline-col {
+  width: 260px;
+  flex-shrink: 0;
+  background: var(--bg-chrome);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.outline-empty {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-tertiary);
+  line-height: 1.5;
+}
+
+.outline-list {
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.outline-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 8px;
+  border-radius: var(--radius-sm);
+  cursor: default;
+  transition: background var(--t);
+}
+
+.outline-row:hover { background: var(--bg-chrome-active); }
+
+.outline-row.h2 { padding-left: 20px; }
+.outline-row.h3 { padding-left: 32px; }
+
+.out-status {
+  width: 12px;
+  height: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.status-dot-h1 {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  opacity: 0.6;
+}
+
+.status-dot-h2 {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-tertiary);
+}
+
+.status-dot-h3 {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  border: 1.5px solid var(--border-medium);
+}
+
+.out-title {
+  font-size: 12.5px;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+}
+
+.out-sub {
+  font-size: 11.5px;
+  color: var(--text-secondary);
 }
 </style>

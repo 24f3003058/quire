@@ -3,7 +3,7 @@
 .ProseMirror {
   outline: none;
   font-family: var(--font-doc);
-  font-size: 15.5px;
+  font-size: var(--editor-font-size);
   line-height: 1.8;
   color: var(--text);
   min-height: 200px;
@@ -84,7 +84,7 @@
 
 .ProseMirror p {
   font-family: var(--font-doc);
-  font-size: 15.5px;
+  font-size: var(--editor-font-size);
   line-height: 1.8;
   color: var(--text);
   margin-bottom: 14px;

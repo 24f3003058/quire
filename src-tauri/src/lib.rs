@@ -18,6 +18,10 @@ pub use library::{
     // annotations
     create_annotation, get_annotations_for_attachment, get_all_annotations,
     delete_annotation, update_annotation_note,
+    // zotero
+    check_zotero_available, import_zotero_annotations,
+    // workbench state
+    save_workbench_state, load_workbench_state,
 };
 
 use serde::{Deserialize, Serialize};
@@ -691,6 +695,12 @@ pub fn run() {
             get_all_annotations,
             delete_annotation,
             update_annotation_note,
+            // Zotero
+            check_zotero_available,
+            import_zotero_annotations,
+            // Workbench state
+            save_workbench_state,
+            load_workbench_state,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

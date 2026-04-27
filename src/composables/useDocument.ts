@@ -32,6 +32,12 @@ export interface DocAuthor {
   affiliation: string
 }
 
+export interface DocHeading {
+  id: string | null
+  level: number
+  text: string
+}
+
 // Module-level singletons — shared across all components without Pinia
 const filePath = ref<string | null>(null)
 const bibPath = ref<string | null>(null)
@@ -80,6 +86,7 @@ const citations = ref<BibEntry[]>([
   },
 ])
 const citationOrder = ref<string[]>(['popova2022', 'fda2021', 'hadley2019'])
+const docHeadings = ref<DocHeading[]>([])
 
 export function useDocument() {
   return {
@@ -94,5 +101,6 @@ export function useDocument() {
     lastSaved,
     citations,
     citationOrder,
+    docHeadings,
   }
 }

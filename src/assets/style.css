@@ -38,6 +38,8 @@
   --sidebar-w: 52px;
   --titlebar-h: 42px;
   --statusbar-h: 26px;
+  --editor-font-size: 15.5px;
+  --paper-max-width: 660px;
 }
 
 html, body, #app {

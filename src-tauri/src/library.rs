@@ -1403,3 +1403,198 @@ pub fn get_all_annotations() -> Result<Vec<AnnotationWithSource>, String> {
         .map_err(|e| e.to_string())?;
     Ok(rows)
 }
+
+// ── Zotero integration ────────────────────────────────────────────────────────
+
+fn find_zotero_db() -> Option<PathBuf> {
+    let home = dirs::home_dir()?;
+    let candidates = [
+        home.join("Zotero").join("zotero.sqlite"),
+        home.join("Documents").join("Zotero").join("zotero.sqlite"),
+        home.join("OneDrive").join("Zotero").join("zotero.sqlite"),
+    ];
+    candidates.into_iter().find(|p| p.exists())
+}
+
+fn resolve_zotero_att_path(zotero_dir: &std::path::Path, att_path: &str) -> Option<PathBuf> {
+    if att_path.starts_with("storage:") {
+        let full = zotero_dir.join("storage").join(&att_path[8..]);
+        if full.exists() { return Some(full); }
+    } else if att_path.starts_with("attachments:") {
+        let full = zotero_dir.join(&att_path[12..]);
+        if full.exists() { return Some(full); }
+    } else {
+        let p = std::path::Path::new(att_path);
+        if p.exists() { return Some(p.to_path_buf()); }
+    }
+    None
+}
+
+fn zotero_page(page_label: Option<String>, sort_index: &str) -> i64 {
+    if let Some(p) = page_label {
+        if let Ok(n) = p.trim().parse::<i64>() { return n.max(1); }
+    }
+    sort_index.get(..5).and_then(|s| s.parse::<i64>().ok()).map(|p| p + 1).unwrap_or(1)
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ZoteroScanResult {
+    pub annotations_imported: usize,
+    pub items_matched: usize,
+    pub skipped_no_match: Vec<String>,
+    pub skipped_already_imported: usize,
+}
+
+#[tauri::command]
+pub fn check_zotero_available() -> bool {
+    find_zotero_db().is_some()
+}
+
+#[tauri::command]
+pub fn import_zotero_annotations() -> Result<ZoteroScanResult, String> {
+    let zotero_path = find_zotero_db()
+        .ok_or_else(|| "Zotero database not found. Expected at ~/Zotero/zotero.sqlite.".to_string())?;
+    let zotero_dir = zotero_path.parent().unwrap().to_path_buf();
+
+    let zc = Connection::open_with_flags(
+        &zotero_path,
+        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX,
+    ).map_err(|e| format!("Cannot open Zotero database (try closing Zotero first): {e}"))?;
+
+    let ann_sql = "
+        SELECT
+            ia.text, ia.comment, ia.color, ia.pageLabel, ia.sortIndex,
+            iatt.path   AS attPath,
+            att_item.key AS attKey,
+            paper.key   AS paperKey,
+            (SELECT idv.value FROM itemData d2
+             JOIN fields f2 ON f2.fieldID = d2.fieldID
+             JOIN itemDataValues idv ON idv.valueID = d2.valueID
+             WHERE d2.itemID = paper.itemID AND f2.fieldName = 'title' LIMIT 1) AS paperTitle,
+            (SELECT idv.value FROM itemData d2
+             JOIN fields f2 ON f2.fieldID = d2.fieldID
+             JOIN itemDataValues idv ON idv.valueID = d2.valueID
+             WHERE d2.itemID = paper.itemID AND f2.fieldName = 'DOI' LIMIT 1) AS paperDoi
+        FROM itemAnnotations ia
+        JOIN itemAttachments iatt ON iatt.itemID = ia.parentItemID
+        JOIN items att_item ON att_item.itemID = ia.parentItemID
+        JOIN items paper ON paper.itemID = iatt.parentItemID
+        WHERE ia.type = 1 AND ia.text IS NOT NULL AND ia.text != ''
+        ORDER BY paper.key, ia.sortIndex
+    ";
+
+    let mut stmt = zc.prepare(ann_sql).map_err(|e| format!("Zotero query failed: {e}"))?;
+
+    struct ZRow {
+        text: String, comment: Option<String>, color: String,
+        page_label: Option<String>, sort_index: String,
+        att_path: String, paper_title: Option<String>, paper_doi: Option<String>,
+    }
+
+    let rows: Vec<ZRow> = stmt.query_map([], |row| Ok(ZRow {
+        text:        row.get(0)?,
+        comment:     row.get(1)?,
+        color:       row.get::<_, Option<String>>(2)?.unwrap_or_else(|| "#ffd400".to_string()),
+        page_label:  row.get(3)?,
+        sort_index:  row.get::<_, Option<String>>(4)?.unwrap_or_default(),
+        att_path:    row.get::<_, Option<String>>(5)?.unwrap_or_default(),
+        paper_title: row.get(8)?,
+        paper_doi:   row.get(9)?,
+    })).map_err(|e| e.to_string())?
+    .collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())?;
+
+    let qc = open_conn()?;
+    struct QItem { id: i64, doi: Option<String>, title: Option<String> }
+    let mut q_stmt = qc.prepare(
+        "SELECT id, doi, title FROM items WHERE id NOT IN (SELECT item_id FROM trash)"
+    ).map_err(|e| e.to_string())?;
+    let quire_items: Vec<QItem> = q_stmt.query_map([], |row| Ok(QItem {
+        id: row.get(0)?, doi: row.get(1)?, title: row.get(2)?,
+    })).map_err(|e| e.to_string())?
+    .collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())?;
+
+    let mut annotations_imported = 0usize;
+    let mut items_matched_set = std::collections::HashSet::<i64>::new();
+    let mut skipped_no_match: Vec<String> = vec![];
+    let mut skipped_already_imported = 0usize;
+
+    for row in &rows {
+        let matched = quire_items.iter().find(|qi| {
+            if let (Some(qd), Some(zd)) = (&qi.doi, &row.paper_doi) {
+                let qn = qd.trim().to_lowercase().replace("https://doi.org/", "");
+                let zn = zd.trim().to_lowercase().replace("https://doi.org/", "");
+                if !qn.is_empty() && qn == zn { return true; }
+            }
+            if let (Some(qt), Some(zt)) = (&qi.title, &row.paper_title) {
+                let a: String = qt.to_lowercase().chars().take(60).collect();
+                let b: String = zt.to_lowercase().chars().take(60).collect();
+                if !a.is_empty() && a == b { return true; }
+            }
+            false
+        });
+
+        let Some(qi) = matched else {
+            let label = row.paper_title.clone().unwrap_or_else(|| "unknown".to_string());
+            if !skipped_no_match.contains(&label) { skipped_no_match.push(label); }
+            continue;
+        };
+        items_matched_set.insert(qi.id);
+
+        let Some(full) = resolve_zotero_att_path(&zotero_dir, &row.att_path) else { continue };
+        let full_str = full.to_string_lossy().to_string();
+        let fname = full.file_name().and_then(|n| n.to_str()).unwrap_or("zotero.pdf").to_string();
+
+        let att_id: i64 = {
+            let ex: Option<i64> = qc.query_row(
+                "SELECT id FROM attachments WHERE file_path=?1", params![full_str], |r| r.get(0),
+            ).optional().map_err(|e| e.to_string())?;
+            if let Some(id) = ex { id } else {
+                qc.execute(
+                    "INSERT INTO attachments (item_id, file_name, file_path) VALUES (?1,?2,?3)",
+                    params![qi.id, fname, full_str],
+                ).map_err(|e| e.to_string())?;
+                qc.last_insert_rowid()
+            }
+        };
+
+        let page = zotero_page(row.page_label.clone(), &row.sort_index);
+        let already: bool = qc.query_row(
+            "SELECT 1 FROM annotations WHERE attachment_id=?1 AND page=?2 AND SUBSTR(selected_text,1,100)=SUBSTR(?3,1,100)",
+            params![att_id, page, row.text], |_| Ok(()),
+        ).optional().map_err(|e| e.to_string())?.is_some();
+
+        if already { skipped_already_imported += 1; continue; }
+
+        qc.execute(
+            "INSERT INTO annotations (item_id,attachment_id,page,ann_type,color,selected_text,note_text,position_json)
+             VALUES (?1,?2,?3,'highlight',?4,?5,?6,'{}')",
+            params![qi.id, att_id, page, row.color, row.text,
+                    row.comment.as_deref().filter(|s| !s.is_empty())],
+        ).map_err(|e| e.to_string())?;
+        annotations_imported += 1;
+    }
+
+    Ok(ZoteroScanResult { annotations_imported, items_matched: items_matched_set.len(), skipped_no_match, skipped_already_imported })
+}
+
+// ── Workbench state ───────────────────────────────────────────────────────────
+
+fn workbench_state_path(doc_path: &str) -> PathBuf {
+    let p = std::path::Path::new(doc_path);
+    let stem = p.file_stem().and_then(|s| s.to_str()).unwrap_or("untitled");
+    let dir = p.parent().unwrap_or_else(|| std::path::Path::new("."));
+    dir.join(format!("{}.quire.json", stem))
+}
+
+#[tauri::command]
+pub fn save_workbench_state(doc_path: String, state: String) -> Result<(), String> {
+    fs::write(workbench_state_path(&doc_path), state).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn load_workbench_state(doc_path: String) -> Result<Option<String>, String> {
+    let p = workbench_state_path(&doc_path);
+    if !p.exists() { return Ok(None); }
+    fs::read_to_string(p).map(Some).map_err(|e| e.to_string())
+}

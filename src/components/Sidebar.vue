@@ -72,12 +72,17 @@ const route = useRoute()
     </div>
 
     <div class="nav-bottom">
-      <div class="nav-item settings" title="Settings">
+      <router-link
+        to="/settings"
+        class="nav-item"
+        :class="{ active: route.name === 'settings' }"
+        title="Settings"
+      >
         <svg width="17" height="17" viewBox="0 0 17 17" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
           <circle cx="8.5" cy="8.5" r="2.5"/>
           <path d="M8.5 1v2M8.5 14v2M1 8.5h2M14 8.5h2M3.05 3.05l1.41 1.41M12.54 12.54l1.41 1.41M3.05 13.95l1.41-1.41M12.54 4.46l1.41-1.41"/>
         </svg>
-      </div>
+      </router-link>
     </div>
   </nav>
 </template>
@@ -125,9 +130,5 @@ const route = useRoute()
 .nav-item.active {
   background: var(--accent-soft);
   color: var(--accent);
-}
-
-.nav-item.settings {
-  margin-top: 4px;
 }
 </style>
