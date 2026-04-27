@@ -3,9 +3,11 @@ interface Props {
   title: string
   subtitle: string
   exportLabel?: string | null
+  isDirty?: boolean
   onExport?: () => void
 }
 defineProps<Props>()
+const emit = defineEmits<{ toggleMenu: [] }>()
 </script>
 
 <template>
@@ -14,9 +16,17 @@ defineProps<Props>()
       <span class="dot red"></span>
       <span class="dot yellow"></span>
       <span class="dot green"></span>
+      <button class="hamburger" @click="emit('toggleMenu')" title="Menu">
+        <svg width="13" height="11" viewBox="0 0 13 11" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+          <line x1="0" y1="1.5" x2="13" y2="1.5"/>
+          <line x1="0" y1="5.5" x2="13" y2="5.5"/>
+          <line x1="0" y1="9.5" x2="13" y2="9.5"/>
+        </svg>
+      </button>
     </div>
 
     <div class="title-center">
+      <span v-if="isDirty" class="dirty-dot" title="Unsaved changes">●</span>
       <span class="doc-title">{{ title }}</span>
       <span v-if="subtitle" class="sep">—</span>
       <span v-if="subtitle" class="doc-subtitle">{{ subtitle }}</span>
@@ -49,8 +59,27 @@ defineProps<Props>()
   display: flex;
   gap: 6px;
   align-items: center;
-  width: 56px;
+  width: 88px;
   flex-shrink: 0;
+}
+
+.hamburger {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-tertiary);
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  transition: background var(--t), color var(--t);
+  margin-left: 2px;
+}
+.hamburger:hover {
+  background: var(--bg-chrome-active);
+  color: var(--text-secondary);
 }
 
 .dot {
@@ -73,6 +102,13 @@ defineProps<Props>()
   font-weight: 500;
   letter-spacing: -0.01em;
   overflow: hidden;
+}
+
+.dirty-dot {
+  font-size: 10px;
+  color: var(--text-tertiary);
+  line-height: 1;
+  flex-shrink: 0;
 }
 
 .doc-title {
@@ -116,11 +152,11 @@ defineProps<Props>()
   letter-spacing: -0.01em;
 }
 .export-btn:hover {
-  background: rgba(0, 0, 0, 0.07);
-  border-color: rgba(0, 0, 0, 0.18);
+  background: rgba(0,0,0,0.07);
+  border-color: rgba(0,0,0,0.18);
   box-shadow: var(--shadow-xs);
 }
 .export-btn:active {
-  background: rgba(0, 0, 0, 0.1);
+  background: rgba(0,0,0,0.1);
 }
 </style>
